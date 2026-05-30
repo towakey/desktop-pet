@@ -8,6 +8,12 @@ const alarmIndicator = document.getElementById("alarm-indicator")!;
 let isAlarming = false;
 let alarmAudioCtx: AudioContext | null = null;
 let alarmOscillator: OscillatorNode | null = null;
+let lastDismissedAlarmKey: string | null = null;
+
+function getCurrentAlarmKey() {
+  const now = new Date();
+  return `${now.getHours()}:${now.getMinutes()}`;
+}
 
 function drawPolygonCharacter() {
   ctx.clearRect(0, 0, 160, 160);
@@ -158,7 +164,11 @@ function stopAlarmSound() {
 async function checkAlarm() {
   try {
     const shouldAlarm = await invoke<boolean>("check_alarm");
-    if (shouldAlarm && !isAlarming) {
+    const currentAlarmKey = getCurrentAlarmKey();
+    if (lastDismissedAlarmKey !== currentAlarmKey) {
+      lastDismissedAlarmKey = null;
+    }
+    if (shouldAlarm && !isAlarming && lastDismissedAlarmKey !== currentAlarmKey) {
       isAlarming = true;
       canvas.classList.add("alarm-flash");
       alarmIndicator.classList.add("active");
@@ -174,6 +184,7 @@ const petContainer = document.getElementById("pet-container")!;
 petContainer.addEventListener("click", async () => {
   if (isAlarming) {
     isAlarming = false;
+    lastDismissedAlarmKey = getCurrentAlarmKey();
     canvas.classList.remove("alarm-flash");
     alarmIndicator.classList.remove("active");
     stopAlarmSound();
