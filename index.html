@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Desktop Pet</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 200px;
+        height: 200px;
+        overflow: hidden;
+        background: transparent;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      #pet-container {
+        width: 200px;
+        height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        position: relative;
+      }
+      #pet-canvas {
+        width: 160px;
+        height: 160px;
+      }
+      #alarm-indicator {
+        position: absolute;
+        top: 4px;
+        right: 12px;
+        font-size: 18px;
+        display: none;
+        animation: pulse 1s ease-in-out infinite;
+      }
+      #alarm-indicator.active {
+        display: block;
+      }
+      @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-8px); }
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+      }
+      #pet-canvas {
+        animation: float 3s ease-in-out infinite;
+      }
+      .alarm-flash {
+        animation: alarm-ring 0.3s ease-in-out infinite !important;
+      }
+      @keyframes alarm-ring {
+        0%, 100% { transform: rotate(0deg) scale(1); }
+        25% { transform: rotate(-10deg) scale(1.1); }
+        75% { transform: rotate(10deg) scale(1.1); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="pet-container">
+      <canvas id="pet-canvas" width="160" height="160"></canvas>
+      <div id="alarm-indicator">⏰</div>
+    </div>
+    <audio id="alarm-sound" loop>
+      <!-- Alarm sound generated programmatically -->
+    </audio>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

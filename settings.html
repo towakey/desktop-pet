@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Desktop Pet - 設定</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: "Segoe UI", "Yu Gothic UI", "Meiryo", sans-serif;
+        background: #1a1a2e;
+        color: #e0e0e0;
+        padding: 24px;
+        min-height: 100vh;
+      }
+      h1 { font-size: 20px; margin-bottom: 24px; color: #89b4fa; display: flex; align-items: center; gap: 8px; }
+      .section { background: #16213e; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+      .section h2 { font-size: 15px; color: #a6adc8; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; }
+      .form-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+      label { font-size: 14px; min-width: 100px; }
+      input[type="number"] { width: 70px; padding: 8px 10px; border-radius: 8px; border: 1px solid #313244; background: #1a1a2e; color: #e0e0e0; font-size: 16px; text-align: center; }
+      input[type="number"]:focus { outline: none; border-color: #89b4fa; }
+      .toggle { position: relative; width: 48px; height: 26px; cursor: pointer; min-width: 48px; }
+      .toggle input { opacity: 0; width: 0; height: 0; }
+      .toggle-slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #313244; border-radius: 13px; transition: background 0.3s; }
+      .toggle-slider::before { content: ""; position: absolute; width: 20px; height: 20px; left: 3px; bottom: 3px; background: #e0e0e0; border-radius: 50%; transition: transform 0.3s; }
+      .toggle input:checked + .toggle-slider { background: #89b4fa; }
+      .toggle input:checked + .toggle-slider::before { transform: translateX(22px); }
+      .colon { font-size: 20px; font-weight: bold; color: #89b4fa; }
+      .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; transition: background 0.2s; }
+      .btn-primary { background: #89b4fa; color: #1a1a2e; font-weight: 600; }
+      .btn-primary:hover { background: #74a0e8; }
+      .status { font-size: 13px; color: #6c7086; margin-top: 8px; min-height: 20px; }
+      .info { background: #16213e; border-radius: 12px; padding: 16px 20px; font-size: 13px; color: #6c7086; line-height: 1.6; }
+      .info strong { color: #a6adc8; }
+    </style>
+  </head>
+  <body>
+    <h1>🐾 Desktop Pet 設定</h1>
+    <div class="section">
+      <h2>⏰ アラーム設定</h2>
+      <div class="form-row">
+        <label>有効</label>
+        <label class="toggle">
+          <input type="checkbox" id="alarm-enabled" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="form-row">
+        <label>時刻</label>
+        <input type="number" id="alarm-hour" min="0" max="23" value="7" />
+        <span class="colon">:</span>
+        <input type="number" id="alarm-minute" min="0" max="59" value="0" />
+      </div>
+      <div class="form-row" style="margin-top: 16px;">
+        <button class="btn btn-primary" id="save-btn">保存</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+    <div class="section">
+      <h2>🪟 Windows 起動設定</h2>
+      <div class="form-row">
+        <label>自動起動</label>
+        <label class="toggle">
+          <input type="checkbox" id="autostart-enabled" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="status" id="autostart-status"></div>
+    </div>
+    <div class="info">
+      <p><strong>使い方:</strong></p>
+      <p>• キャラクターをクリックするとこの設定画面が開きます</p>
+      <p>• アラーム時刻になるとキャラクターが揺れてアラーム音が鳴ります</p>
+      <p>• キャラクターをクリックするとアラームが止まります</p>
+      <p><strong>将来の機能:</strong> 天気表示 / カレンダー連携 / ローカルLLM会話 / 家電操作</p>
+    </div>
+    <script type="module" src="/src/settings.ts"></script>
+  </body>
+</html>
