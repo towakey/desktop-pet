@@ -1,0 +1,23 @@
+[package]
+name = "desktop-pet"
+version = "0.1.0"
+description = "A desktop pet app with alarm and home automation features"
+authors = ["towakey"]
+edition = "2021"
+
+[lib]
+name = "desktop_pet_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-autostart = "2"
