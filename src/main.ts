@@ -163,16 +163,21 @@ function stopAlarmSound() {
 
 async function checkAlarm() {
   try {
-    const shouldAlarm = await invoke<boolean>("check_alarm");
+    const isActive = await invoke<boolean>("check_alarm");
     const currentAlarmKey = getCurrentAlarmKey();
     if (lastDismissedAlarmKey !== currentAlarmKey) {
       lastDismissedAlarmKey = null;
     }
-    if (shouldAlarm && !isAlarming && lastDismissedAlarmKey !== currentAlarmKey) {
+    if (isActive && !isAlarming && lastDismissedAlarmKey !== currentAlarmKey) {
       isAlarming = true;
       canvas.classList.add("alarm-flash");
       alarmIndicator.classList.add("active");
       startAlarmSound();
+    } else if (!isActive && isAlarming) {
+      isAlarming = false;
+      canvas.classList.remove("alarm-flash");
+      alarmIndicator.classList.remove("active");
+      stopAlarmSound();
     }
   } catch {
     // ignore check errors
@@ -188,6 +193,7 @@ petContainer.addEventListener("click", async () => {
     canvas.classList.remove("alarm-flash");
     alarmIndicator.classList.remove("active");
     stopAlarmSound();
+    await invoke("dismiss_alarm");
     return;
   }
   await invoke("open_settings");
