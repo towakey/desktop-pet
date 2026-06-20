@@ -17,7 +17,7 @@
       .section { background: #16213e; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
       .section h2 { font-size: 15px; color: #a6adc8; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; }
       .form-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-      label { font-size: 14px; min-width: 100px; }
+      label { font-size: 14px; min-width: 140px; }
       input[type="number"] { width: 70px; padding: 8px 10px; border-radius: 8px; border: 1px solid #313244; background: #1a1a2e; color: #e0e0e0; font-size: 16px; text-align: center; }
       input[type="number"]:focus { outline: none; border-color: #89b4fa; }
       .toggle { position: relative; width: 48px; height: 26px; cursor: pointer; min-width: 48px; }
@@ -40,7 +40,7 @@
     <div class="section">
       <h2>⏰ アラーム設定</h2>
       <div class="form-row">
-        <label>有効</label>
+        <label id="alarm-enabled-label">無効</label>
         <label class="toggle">
           <input type="checkbox" id="alarm-enabled" />
           <span class="toggle-slider"></span>
@@ -60,7 +60,7 @@
     <div class="section">
       <h2>🪟 Windows 起動設定</h2>
       <div class="form-row">
-        <label>自動起動</label>
+        <label id="autostart-enabled-label">自動起動: 無効</label>
         <label class="toggle">
           <input type="checkbox" id="autostart-enabled" />
           <span class="toggle-slider"></span>

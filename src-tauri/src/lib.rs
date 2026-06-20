@@ -1,7 +1,7 @@
 use chrono::Timelike;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, sync::Mutex};
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WindowEvent};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlarmConfig {
@@ -56,17 +56,9 @@ fn set_alarm(state: tauri::State<'_, AppState>, config: AlarmConfig) -> Result<(
 #[tauri::command]
 fn open_settings(app: tauri::AppHandle) {
     if let Some(win) = app.get_webview_window("settings") {
+        let _ = win.show();
         let _ = win.set_focus();
-        return;
     }
-    let _ = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("/settings.html".into()))
-        .title("Desktop Pet - 設定")
-        .inner_size(480.0, 560.0)
-        .resizable(true)
-        .decorations(true)
-        .always_on_top(false)
-        .skip_taskbar(false)
-        .build();
 }
 
 #[tauri::command]
@@ -92,6 +84,15 @@ pub fn run() {
                 alarm: Mutex::new(alarm),
                 config_path,
             });
+            if let Some(win) = app.get_webview_window("settings") {
+                let settings_win = win.clone();
+                win.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = settings_win.hide();
+                    }
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

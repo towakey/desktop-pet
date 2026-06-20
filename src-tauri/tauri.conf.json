@@ -25,6 +25,18 @@
         "skipTaskbar": true,
         "x": 100,
         "y": 100
+      },
+      {
+        "label": "settings",
+        "title": "Desktop Pet - 設定",
+        "url": "/settings.html",
+        "width": 480,
+        "height": 560,
+        "resizable": true,
+        "decorations": true,
+        "visible": false,
+        "alwaysOnTop": false,
+        "skipTaskbar": false
       }
     ],
     "security": {

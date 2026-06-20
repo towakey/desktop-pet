@@ -8,17 +8,28 @@ interface AlarmConfig {
 }
 
 const enabledCheckbox = document.getElementById("alarm-enabled") as HTMLInputElement;
+const enabledLabel = document.getElementById("alarm-enabled-label") as HTMLLabelElement;
 const hourInput = document.getElementById("alarm-hour") as HTMLInputElement;
 const minuteInput = document.getElementById("alarm-minute") as HTMLInputElement;
 const saveBtn = document.getElementById("save-btn") as HTMLButtonElement;
 const statusDiv = document.getElementById("status") as HTMLDivElement;
 const autostartCheckbox = document.getElementById("autostart-enabled") as HTMLInputElement;
+const autostartLabel = document.getElementById("autostart-enabled-label") as HTMLLabelElement;
 const autostartStatus = document.getElementById("autostart-status") as HTMLDivElement;
+
+function updateAlarmLabel() {
+  enabledLabel.textContent = enabledCheckbox.checked ? "有効" : "無効";
+}
+
+function updateAutostartLabel() {
+  autostartLabel.textContent = autostartCheckbox.checked ? "自動起動: 有効" : "自動起動: 無効";
+}
 
 async function loadAlarm() {
   try {
     const config = await invoke<AlarmConfig>("get_alarm");
     enabledCheckbox.checked = config.enabled;
+    updateAlarmLabel();
     hourInput.value = String(config.hour);
     minuteInput.value = String(config.minute);
   } catch {
@@ -29,10 +40,15 @@ async function loadAlarm() {
 async function loadAutostart() {
   try {
     autostartCheckbox.checked = await isEnabled();
+    updateAutostartLabel();
   } catch {
     autostartStatus.textContent = "自動起動状態の取得に失敗しました";
   }
 }
+
+enabledCheckbox.addEventListener("change", updateAlarmLabel);
+
+autostartCheckbox.addEventListener("change", updateAutostartLabel);
 
 saveBtn.addEventListener("click", async () => {
   const config: AlarmConfig = {
@@ -73,6 +89,7 @@ autostartCheckbox.addEventListener("change", async () => {
     setTimeout(() => { autostartStatus.textContent = ""; }, 3000);
   } catch {
     autostartCheckbox.checked = !autostartCheckbox.checked;
+    updateAutostartLabel();
     autostartStatus.textContent = "自動起動設定の変更に失敗しました";
   }
 });
