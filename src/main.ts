@@ -15,6 +15,8 @@ function getCurrentAlarmKey() {
   return `${now.getHours()}:${now.getMinutes()}`;
 }
 
+
+
 function drawPolygonCharacter() {
   ctx.clearRect(0, 0, 160, 160);
 

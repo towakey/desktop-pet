@@ -1,6 +1,7 @@
-use chrono::{Timelike, TimeZone};
+use chrono::Timelike;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -8,18 +9,21 @@ use std::{fs, path::PathBuf};
 use tauri::{Manager, WindowEvent};
 
 #[cfg(windows)]
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+#[cfg(windows)]
 use windows::core::PCWSTR;
 #[cfg(windows)]
-use windows::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+use windows::Win32::Foundation::HWND;
+#[cfg(windows)]
+use windows::Win32::Graphics::Gdi::{CreatePolygonRgn, SetWindowRgn, ALTERNATE};
+#[cfg(windows)]
+use windows::Win32::Foundation::POINT;
 #[cfg(windows)]
 use windows::Win32::Media::Audio::{
     PlaySoundW, SND_ALIAS, SND_FILENAME, SND_LOOP, SND_ASYNC, SND_PURGE,
 };
-#[cfg(windows)]
-use windows::Win32::System::Threading::{
-    CreateWaitableTimerExW, SetWaitableTimer, WaitForSingleObject,
-    CREATE_WAITABLE_TIMER_MANUAL_RESET, TIMER_ALL_ACCESS,
-};
+
+const TASK_NAME: &str = "DesktopPetAlarm";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlarmConfig {
@@ -43,7 +47,6 @@ pub struct AppState {
     pub config_path: PathBuf,
     pub alarm_active: Arc<AtomicBool>,
     pub dismissed: Arc<AtomicBool>,
-    pub timer_generation: Arc<AtomicU64>,
 }
 
 fn load_alarm(config_path: &PathBuf) -> AlarmConfig {
@@ -105,6 +108,82 @@ fn play_alarm_sound() {}
 #[cfg(not(windows))]
 fn stop_alarm_sound() {}
 
+/// Register a Windows Task Scheduler task that wakes the PC from sleep
+/// at the specified alarm time. The task runs a trivial command; the
+/// actual alarm sound is played by the polling thread after wake.
+#[cfg(windows)]
+fn schedule_wake_task(config: &AlarmConfig) {
+    // Always remove existing task first
+    remove_wake_task();
+
+    if !config.enabled {
+        return;
+    }
+
+    let now = chrono::Local::now();
+    let today = now.date_naive();
+    let alarm_naive = match today.and_hms_opt(config.hour, config.minute, 0) {
+        Some(t) => t,
+        None => {
+            eprintln!("[wake_task] invalid alarm time");
+            return;
+        }
+    };
+    let alarm_local = if alarm_naive <= now.naive_local() {
+        alarm_naive + chrono::Duration::days(1)
+    } else {
+        alarm_naive
+    };
+
+    let time_str = alarm_local.format("%Y-%m-%dT%H:%M:%S").to_string();
+    eprintln!("[wake_task] scheduling for {}", time_str);
+
+    // PowerShell command to create a scheduled task with WakeToRun
+    let ps_script = format!(
+        r#"
+$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c exit'
+$trigger = New-ScheduledTaskTrigger -Once -At '{time}'
+$settings = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+Register-ScheduledTask -TaskName '{task}' -Action $action -Trigger $trigger -Settings $settings -Force
+"#,
+        time = time_str,
+        task = TASK_NAME,
+    );
+
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-Command", &ps_script])
+        .output();
+
+    match output {
+        Ok(o) => {
+            if o.status.success() {
+                eprintln!("[wake_task] task registered successfully");
+            } else {
+                let stderr = String::from_utf8_lossy(&o.stderr);
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                eprintln!("[wake_task] task registration failed: stdout={}, stderr={}", stdout, stderr);
+            }
+        }
+        Err(e) => {
+            eprintln!("[wake_task] failed to run powershell: {}", e);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn remove_wake_task() {
+    let ps_script = format!("Unregister-ScheduledTask -TaskName '{}' -Confirm:$false -ErrorAction SilentlyContinue", TASK_NAME);
+    let _ = Command::new("powershell")
+        .args(["-NoProfile", "-Command", &ps_script])
+        .output();
+    eprintln!("[wake_task] removed existing task");
+}
+
+#[cfg(not(windows))]
+fn schedule_wake_task(_config: &AlarmConfig) {}
+#[cfg(not(windows))]
+fn remove_wake_task() {}
+
 /// Polling thread: checks every second and triggers alarm when time matches.
 /// Also serves as backup after wake-from-sleep.
 fn start_alarm_thread(
@@ -164,97 +243,55 @@ fn start_alarm_thread(
     });
 }
 
-/// Wake timer thread: uses Windows Waitable Timer to wake from sleep.
-/// Each call gets a generation number; if a newer generation exists, the old thread exits.
 #[cfg(windows)]
-fn start_wake_timer_thread(
-    config: AlarmConfig,
-    alarm_active: Arc<AtomicBool>,
-    timer_generation: Arc<AtomicU64>,
-    my_generation: u64,
-) {
-    thread::spawn(move || {
-        if !config.enabled {
+fn set_window_region(window: &tauri::WebviewWindow) {
+    let handle = match window.window_handle() {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("[window_region] failed to get window handle: {}", e);
             return;
         }
-
-        // Calculate next alarm time in local, then convert to UTC
-        let now = chrono::Local::now();
-        let today = now.date_naive();
-        let alarm_naive = match today.and_hms_opt(config.hour, config.minute, 0) {
-            Some(t) => t,
-            None => return,
-        };
-        let alarm_local = if alarm_naive <= now.naive_local() {
-            alarm_naive + chrono::Duration::days(1)
-        } else {
-            alarm_naive
-        };
-
-        // Convert local NaiveDateTime to UTC timestamp
-        let local_dt = match chrono::Local.from_local_datetime(&alarm_local) {
-            chrono::MappedLocalTime::Single(dt) => dt,
-            _ => return,
-        };
-        let utc_dt = local_dt.with_timezone(&chrono::Utc);
-        let unix_timestamp = utc_dt.timestamp() as i64;
-
-        // Windows FILETIME: 100ns intervals since 1601-01-01 UTC
-        let filetime_100ns = unix_timestamp * 10_000_000 + 116_444_736_000_000_000;
-
-        unsafe {
-            let timer = match CreateWaitableTimerExW(
-                None,
-                PCWSTR::null(),
-                CREATE_WAITABLE_TIMER_MANUAL_RESET,
-                TIMER_ALL_ACCESS.0,
-            ) {
-                Ok(t) => t,
-                Err(_) => return,
-            };
-
-            let due_time: i64 = filetime_100ns;
-            // fResume = true: wake from sleep
-            if SetWaitableTimer(timer, &due_time, 0, None, None, true).is_err() {
-                let _ = CloseHandle(timer);
-                return;
-            }
-
-            // Wait for the timer to signal, checking generation every second
-            loop {
-                if timer_generation.load(Ordering::SeqCst) != my_generation {
-                    let _ = CloseHandle(timer);
-                    return;
-                }
-                let result = WaitForSingleObject(timer, 1000);
-                if result == WAIT_OBJECT_0 {
-                    // Timer fired (possibly woke from sleep)
-                    // The polling thread will handle the actual sound playback,
-                    // but we trigger it immediately here too for responsiveness.
-                    let now = chrono::Local::now();
-                    let current = (now.hour(), now.minute());
-                    if current == (config.hour, config.minute)
-                        && !alarm_active.load(Ordering::Relaxed)
-                    {
-                        play_alarm_sound();
-                        alarm_active.store(true, Ordering::Relaxed);
-                    }
-                    let _ = CloseHandle(timer);
-                    return;
-                }
-            }
+    };
+    let hwnd = match handle.as_raw() {
+        RawWindowHandle::Win32(h) => HWND(h.hwnd.get() as *mut std::ffi::c_void),
+        _ => {
+            eprintln!("[window_region] unsupported window handle type");
+            return;
         }
+    };
+
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let mut points = [
+        (88, 28),
+        (138, 58),
+        (153, 98),
+        (163, 88),
+        (158, 108),
+        (128, 138),
+        (123, 153),
+        (103, 153),
+        (113, 138),
+        (73, 138),
+        (65, 153),
+        (45, 153),
+        (55, 138),
+        (48, 138),
+        (23, 98),
+        (38, 58),
+    ].map(|(x, y)| POINT {
+        x: (x as f64 * scale).round() as i32,
+        y: (y as f64 * scale).round() as i32,
     });
+
+    unsafe {
+        let rgn = CreatePolygonRgn(&mut points, ALTERNATE);
+        let _ = SetWindowRgn(hwnd, Some(rgn), true);
+        // SetWindowRgn takes ownership of the region, do not delete it
+    }
 }
 
 #[cfg(not(windows))]
-fn start_wake_timer_thread(
-    _config: AlarmConfig,
-    _alarm_active: Arc<AtomicBool>,
-    _timer_generation: Arc<AtomicU64>,
-    _my_generation: u64,
-) {
-}
+fn set_window_region(_window: &tauri::WebviewWindow) {}
 
 #[tauri::command]
 fn get_alarm(state: tauri::State<'_, AppState>) -> AlarmConfig {
@@ -269,18 +306,8 @@ fn set_alarm(state: tauri::State<'_, AppState>, config: AlarmConfig) -> Result<(
         *alarm = config.clone();
     }
 
-    // Start a new wake timer thread with an incremented generation.
-    // Old threads will see the generation mismatch and exit.
-    let my_generation = state.timer_generation.fetch_add(1, Ordering::SeqCst) + 1;
-
-    if config.enabled {
-        start_wake_timer_thread(
-            config,
-            Arc::clone(&state.alarm_active),
-            Arc::clone(&state.timer_generation),
-            my_generation,
-        );
-    }
+    // Register or remove the wake task
+    schedule_wake_task(&config);
 
     Ok(())
 }
@@ -315,28 +342,25 @@ pub fn run() {
             let alarm = Arc::new(Mutex::new(alarm));
             let alarm_active = Arc::new(AtomicBool::new(false));
             let dismissed = Arc::new(AtomicBool::new(false));
-            let timer_generation = Arc::new(AtomicU64::new(0));
 
-            // Start polling thread (backup for when not sleeping)
+            // Start polling thread (handles sound playback, including after wake)
             start_alarm_thread(
                 Arc::clone(&alarm),
                 Arc::clone(&alarm_active),
                 Arc::clone(&dismissed),
             );
 
-            // Set initial wake timer if alarm is enabled
+            // Register wake task if alarm is enabled at startup
             {
                 let config = alarm.lock().unwrap().clone();
                 if config.enabled {
-                    let my_generation =
-                        timer_generation.fetch_add(1, Ordering::SeqCst) + 1;
-                    start_wake_timer_thread(
-                        config,
-                        Arc::clone(&alarm_active),
-                        Arc::clone(&timer_generation),
-                        my_generation,
-                    );
+                    schedule_wake_task(&config);
                 }
+            }
+
+            if let Some(character) = app.get_webview_window("character") {
+                #[cfg(windows)]
+                set_window_region(&character);
             }
 
             app.manage(AppState {
@@ -344,7 +368,6 @@ pub fn run() {
                 config_path,
                 alarm_active,
                 dismissed,
-                timer_generation,
             });
             if let Some(win) = app.get_webview_window("settings") {
                 let settings_win = win.clone();
